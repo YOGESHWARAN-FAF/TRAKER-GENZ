@@ -1,0 +1,42 @@
+{
+    "rules": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "users": {
+            ".indexOn": [
+                "email"
+            ],
+            "$uid": {
+                ".read": "auth != null",
+                ".write": "$uid === auth.uid",
+                "invites": {
+                    ".write": "auth != null"
+                }
+            }
+        },
+        "squadInvites": {
+            ".indexOn": [
+                "toUid",
+                "fromUid",
+                "email"
+            ],
+            "$inviteId": {
+                ".read": "auth != null && (data.child('toUid').val() === auth.uid || data.child('fromUid').val() === auth.uid || auth.token.email === data.child('email').val())",
+                ".write": "auth != null"
+            }
+        },
+        "squads": {
+            "$squadId": {
+                ".read": "data.child('members').child(auth.uid).exists()",
+                ".write": "data.child('members').child(auth.uid).exists() || !data.exists()",
+                "tasks": {
+                    "$taskId": {
+                        "verifications": {
+                            ".write": "root.child('squads').child($squadId).child('members').child(auth.uid).exists()"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

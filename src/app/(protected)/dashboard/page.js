@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from 'react';
-import { useTasks } from '@/context/TaskContext';
+import { useEffect, useState, useContext } from 'react';
+import { useTasks, TaskContext } from '@/context/TaskContext';
 import { useAuth } from '@/context/AuthContext';
 import { Flame, Zap, Trophy, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { performanceService } from '@/services/performanceService';
+
+export const dynamic = "force-dynamic";
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
     <div className="bg-[#161622]/50 border border-white/5 p-4 rounded-2xl flex items-center space-x-4">
@@ -20,14 +21,23 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 
 export default function Dashboard() {
     const { user } = useAuth();
-    const { tasks } = useTasks();
+
+    // SAFE CONTEXT ACCESS
+    const taskCtx = useContext(TaskContext);
+
+    // Handle loading/undefined state gracefully for Build/SSR
+    if (!taskCtx) {
+        return <div className="p-10 text-center text-gray-500">Loading Dashboard...</div>;
+    }
+
+    const { tasks } = taskCtx;
     const [motivation, setMotivation] = useState("Loading vibes... 🤖");
 
-    const completedToday = tasks.filter(t => t.completed).length;
-    const progress = tasks.length > 0 ? (completedToday / tasks.length) * 100 : 0;
+    const completedToday = tasks ? tasks.filter(t => t.completed).length : 0;
+    const progress = (tasks && tasks.length > 0) ? (completedToday / tasks.length) * 100 : 0;
 
     useEffect(() => {
-        if (user && tasks.length > 0) {
+        if (user && tasks && tasks.length > 0) {
             // Fetch AI motivation based on stats
             fetch('/api/ai', {
                 method: 'POST',
@@ -42,7 +52,7 @@ export default function Dashboard() {
         } else {
             setMotivation("Start grinding to unlock AI roast! 🔥");
         }
-    }, [user, tasks.length]);
+    }, [user, tasks, completedToday]);
 
     return (
         <div className="p-6 space-y-8 pb-24">
@@ -79,7 +89,7 @@ export default function Dashboard() {
             <div className="relative bg-[#1e1e2d] rounded-3xl p-6 border border-white/5 overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#39FF14]/10 rounded-full blur-xl -mr-10 -mt-10"></div>
                 <h2 className="text-xl font-bold mb-2">Ready to grind?</h2>
-                <p className="text-gray-400 text-sm mb-6">You have {tasks.length - completedToday} tasks remaining today.</p>
+                <p className="text-gray-400 text-sm mb-6">You have {(tasks?.length || 0) - completedToday} tasks remaining today.</p>
 
                 <Link href="/tasks" className="inline-flex items-center space-x-2 bg-white text-black px-6 py-3 rounded-xl font-bold hover:bg-gray-200 transition">
                     <span>Go to Tasks</span>

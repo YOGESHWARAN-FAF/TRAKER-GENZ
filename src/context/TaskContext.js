@@ -7,7 +7,7 @@ import { taskService } from '@/services/taskService'; // Services
 import { groupService } from '@/services/groupService';
 import { format } from 'date-fns';
 
-const TaskContext = createContext();
+export const TaskContext = createContext();
 
 export const useTasks = () => useContext(TaskContext);
 

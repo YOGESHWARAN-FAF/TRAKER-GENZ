@@ -3,18 +3,21 @@ import { ref, push, set, update, get } from "firebase/database";
 
 export const groupService = {
     createGroup: async (name, creatorUser, memberNames) => {
-        // Note: In a real app we need Member UIDs. 
-        // For this prototype, we store names or invite links. 
-        // We will just store the creator as admin.
+
+        // Construct members object
+        const membersData = {
+            [creatorUser.uid]: { name: creatorUser.displayName, role: 'admin' }
+        };
+
+        memberNames.forEach((mName, idx) => {
+            membersData[`guest_${Date.now()}_${idx}`] = { name: mName, role: 'member' };
+        });
 
         const groupRef = push(ref(db, `groups`));
         await set(groupRef, {
             id: groupRef.key,
             name,
-            members: {
-                [creatorUser.uid]: { name: creatorUser.displayName, role: 'admin' }
-                // memberNames would need to be resolved to UIDs in a real app
-            },
+            members: membersData,
             createdAt: Date.now()
         });
         return groupRef.key;
@@ -31,16 +34,13 @@ export const groupService = {
         });
     },
 
-    completeGroupTask: async (groupId, taskId, imageProofBase64) => {
+    // Simplified to store Base64 directly in DB, explicit naming
+    completeGroupTask: async (groupId, taskId, proofImageBase64) => {
         await update(ref(db, `groups/${groupId}/tasks/${taskId}`), {
             completed: true,
-            proof: imageProofBase64, // Caution: Realtime DB has size limits (10MB). Base64 images is risky for large scale. Storage is better.
+            proofImageBase64: proofImageBase64,  // Using specific key requested
+            proof: proofImageBase64,             // Keeping legacy key if UI uses it, or just use one. I'll duplicate to be safe.
             completedAt: Date.now()
         });
-        // Normally upload to Storage, get URL, save URL. 
-        // User requirement said "store base64 in localStorage" previously, 
-        // now "Firebase Storage" is listed in TECH STACK but "Frontend only" prompt.
-        // I'll assume Base64 for simplicity or try Storage if I have time. 
-        // Sticking to Base64 small strings to ensure it works without Storage rules config issues.
     }
 };

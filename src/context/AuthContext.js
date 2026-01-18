@@ -22,19 +22,31 @@ export const AuthProvider = ({ children }) => {
     const router = useRouter();
 
     useEffect(() => {
+        // Single source of truth for Auth State
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                // Fetch extra profile data if needed
+                // 1. Sync Session with Server
+                try {
+                    const token = await firebaseUser.getIdToken();
+                    await fetch("/api/auth/session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token })
+                    });
+                } catch (e) {
+                    console.error("Session Sync Error", e);
+                }
+
+                // 2. Sync/Create User Profile in DB
                 const userRef = ref(db, `users/${firebaseUser.uid}`);
                 const snapshot = await get(userRef);
                 let userData = snapshot.val();
 
                 if (!userData) {
-                    // Create profile if new Google Login (handled in googleLogin too but safe here)
                     userData = {
                         uid: firebaseUser.uid,
                         email: firebaseUser.email,
-                        displayName: firebaseUser.displayName || "Gamer",
+                        displayName: firebaseUser.displayName || "Gen-Z User",
                         photoURL: firebaseUser.photoURL || "",
                         level: 1,
                         xp: 0,
@@ -45,38 +57,46 @@ export const AuthProvider = ({ children }) => {
                 }
 
                 setUser({ ...firebaseUser, ...userData });
+
+                // 3. Redirect if on Login page
+                if (window.location.pathname === '/login' || window.location.pathname === '/') {
+                    router.replace("/dashboard");
+                }
+
             } else {
                 setUser(null);
+                // Clear server session
+                try {
+                    await fetch("/api/auth/logout", { method: "POST" });
+                } catch (e) { /* ignore */ }
             }
             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [router]);
 
+    // Stable Login Function
     const googleLogin = async () => {
         const provider = new GoogleAuthProvider();
         try {
-            const result = await signInWithPopup(auth, provider);
-            const idToken = await result.user.getIdToken();
-
-            await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ idToken }),
-            });
-
-            router.push("/dashboard");
+            // Using Popup as it's more reliable for 'fixing' issues in varied environments
+            await signInWithPopup(auth, provider);
+            // onAuthStateChanged will handle the rest
         } catch (error) {
             console.error("Google Login Error", error);
-            alert(error.message);
+            alert("Login Failed: " + error.message);
         }
     };
 
     const registerUser = async (email, password, name) => {
         try {
+            // Create Auth User
             const result = await createUserWithEmailAndPassword(auth, email, password);
-            const userData = {
+
+            // Create DB Profile manually here relative to 'register' flow specific fields
+            const userRef = ref(db, `users/${result.user.uid}`);
+            await set(userRef, {
                 uid: result.user.uid,
                 email: email,
                 displayName: name,
@@ -85,17 +105,9 @@ export const AuthProvider = ({ children }) => {
                 xp: 0,
                 streak: 0,
                 joinedAt: serverTimestamp()
-            };
-            await set(ref(db, `users/${result.user.uid}`), userData);
-
-            const idToken = await result.user.getIdToken();
-            await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ idToken }),
             });
 
-            router.push("/dashboard");
+            // onAuthStateChanged will handle the rest (session, redirect)
         } catch (error) {
             console.error("Register Error", error);
             throw error;
@@ -104,16 +116,7 @@ export const AuthProvider = ({ children }) => {
 
     const loginUser = async (email, password) => {
         try {
-            const result = await signInWithEmailAndPassword(auth, email, password);
-            const idToken = await result.user.getIdToken();
-
-            await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ idToken }),
-            });
-
-            router.push("/dashboard");
+            await signInWithEmailAndPassword(auth, email, password);
         } catch (error) {
             console.error("Login Error", error);
             throw error;
@@ -122,8 +125,7 @@ export const AuthProvider = ({ children }) => {
 
     const logoutUser = async () => {
         await signOut(auth);
-        await fetch("/api/auth/logout", { method: "POST" });
-        router.push("/");
+        router.push("/login"); // Immediate Client Redirect
     };
 
     return (
