@@ -3,16 +3,13 @@ import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { cookies } from "next/headers";
 
-// Prevent multiple initializations in dev hot-reload
 const getAdminApp = () => {
     if (getApps().length > 0) {
         return getApps()[0];
     }
 
-    // Note: These env vars must be set in .env.local
     if (!process.env.FIREBASE_PRIVATE_KEY || !process.env.FIREBASE_CLIENT_EMAIL) {
-        // Fallback for verification during build without keys, or handling missing keys gracefully
-        console.warn("Missing Firebase Admin Keys. Session creation will fail.");
+        console.warn("Missing Firebase Admin Keys.");
     }
 
     return initializeApp({
@@ -30,8 +27,8 @@ export async function POST(request) {
         const app = getAdminApp();
         const auth = getAuth(app);
 
-        // Verify the ID token first
-        const decodedToken = await auth.verifyIdToken(token);
+        // Verify token
+        await auth.verifyIdToken(token);
 
         // Create session cookie (5 days)
         const expiresIn = 60 * 60 * 24 * 5 * 1000;
@@ -39,11 +36,14 @@ export async function POST(request) {
 
         const response = NextResponse.json({ success: true });
 
-        // Set cookie using next/headers
+        const isProduction = process.env.NODE_ENV === "production";
+
+        // Set cookie with strict security policies for Vercel
         (await cookies()).set("session", sessionCookie, {
             maxAge: expiresIn / 1000,
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
+            secure: isProduction, // True in Prod (Vercel), False in Local (http)
+            sameSite: "lax",
             path: "/",
         });
 

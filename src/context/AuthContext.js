@@ -58,9 +58,11 @@ export const AuthProvider = ({ children }) => {
 
                 setUser({ ...firebaseUser, ...userData });
 
-                // 3. Redirect if on Login page
-                if (window.location.pathname === '/login' || window.location.pathname === '/') {
+                // 3. Force Redirect if on Login page or Root
+                const path = window.location.pathname;
+                if (path === '/login' || path === '/') {
                     router.replace("/dashboard");
+                    router.refresh();
                 }
 
             } else {
@@ -80,9 +82,7 @@ export const AuthProvider = ({ children }) => {
     const googleLogin = async () => {
         const provider = new GoogleAuthProvider();
         try {
-            // Using Popup as it's more reliable for 'fixing' issues in varied environments
             await signInWithPopup(auth, provider);
-            // onAuthStateChanged will handle the rest
         } catch (error) {
             console.error("Google Login Error", error);
             alert("Login Failed: " + error.message);
@@ -91,10 +91,7 @@ export const AuthProvider = ({ children }) => {
 
     const registerUser = async (email, password, name) => {
         try {
-            // Create Auth User
             const result = await createUserWithEmailAndPassword(auth, email, password);
-
-            // Create DB Profile manually here relative to 'register' flow specific fields
             const userRef = ref(db, `users/${result.user.uid}`);
             await set(userRef, {
                 uid: result.user.uid,
@@ -106,8 +103,6 @@ export const AuthProvider = ({ children }) => {
                 streak: 0,
                 joinedAt: serverTimestamp()
             });
-
-            // onAuthStateChanged will handle the rest (session, redirect)
         } catch (error) {
             console.error("Register Error", error);
             throw error;
